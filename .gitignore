@@ -1,0 +1,39 @@
+# SwiftPM, Xcode and packaged applications
+.build/
+.swiftpm/
+/build/
+DerivedData/
+*.app/
+*.dSYM/
+*.xcuserstate
+xcuserdata/
+
+# Local telemetry, recovery data, diagnostics and release archives
+*.jsonl
+*.log
+*.sample.txt
+*.ips
+*.zip
+*.tar.gz
+*.dmg
+preferences*.plist
+rollback-*/
+
+# Local configuration and signing material
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+*.swp
+*~

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show toolchain
+        run: swift --version
+      - name: Check repository
+        run: make check
+      - name: Run isolated tests
+        run: make test
+      - name: Build application
+        run: make app
+      - name: Verify local signature and notices
+        run: |
+          codesign --verify --deep --strict build/BatteryFlow.app
+          cmp LICENSE build/BatteryFlow.app/Contents/Resources/LICENSE
+          cmp THIRD_PARTY_NOTICES.md build/BatteryFlow.app/Contents/Resources/THIRD_PARTY_NOTICES.md
