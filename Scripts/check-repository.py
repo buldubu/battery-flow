@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Check publishable files, version consistency, local doc links, and license presence.
+"""Check repository hygiene in the working tree or the exact staged snapshot."""
 
-This is a small repository hygiene check, not a complete secret or license audit.
-It checks tracked files and unignored new files without staging or changing them.
-"""
-
+import argparse
 import plistlib
+import posixpath
 import re
 import subprocess
 import tempfile
@@ -45,25 +43,74 @@ def candidate_files():
     return sorted(set(listing.decode().rstrip("\0").split("\0")) - {""})
 
 
-def main():
-    files = candidate_files()
-    public_paths = {(ROOT / name).resolve() for name in files}
-    version = (ROOT / "VERSION").read_text().strip()
+def read_files(staged):
+    result = {}
+    if staged:
+        if Path(git("rev-parse", "--show-toplevel").decode().strip()).resolve() != ROOT:
+            raise ValueError("staged checks must run in the project Git repository")
+        for entry in git("ls-files", "--stage", "-z").split(b"\0"):
+            if not entry:
+                continue
+            metadata, name_bytes = entry.split(b"\t", 1)
+            mode, object_id, stage = metadata.decode().split()
+            name = name_bytes.decode()
+            if stage != "0":
+                fail(f"{name}: resolve the merge conflict before committing")
+            elif mode not in ("100644", "100755"):
+                fail(f"{name}: symlinks and submodules require review before publication")
+            elif int(git("cat-file", "-s", object_id)) > 1_000_000:
+                fail(f"{name}: review files larger than 1 MB before publishing")
+            else:
+                result[name] = git("cat-file", "blob", object_id)
+    else:
+        for name in candidate_files():
+            path = ROOT / name
+            if path.is_symlink():
+                fail(f"{name}: review symlinks before publishing")
+            elif not path.is_file():
+                fail(f"{name}: tracked file is missing; stage its deletion or restore it")
+            elif path.stat().st_size > 1_000_000:
+                fail(f"{name}: review files larger than 1 MB before publishing")
+            else:
+                result[name] = path.read_bytes()
+    return result
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--staged", action="store_true", help="read files from the Git index")
+    args = parser.parse_args(argv)
+    ERRORS.clear()
+    try:
+        files = read_files(args.staged)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"ERROR: unable to read repository snapshot: {error}")
+        return 1
+    public_paths = set(files)
+    def read_text(name):
+        try:
+            return files.get(name, b"").decode("utf-8")
+        except UnicodeDecodeError:
+            fail(f"{name}: expected a UTF-8 text file")
+            return ""
+    version = read_text("VERSION").strip()
     if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
         fail("VERSION must contain a MAJOR.MINOR.PATCH release number")
-    with (ROOT / "Resources/Info.plist").open("rb") as stream:
-        info = plistlib.load(stream)
+    try:
+        info = plistlib.loads(files.get("Resources/Info.plist", b""))
+    except (plistlib.InvalidFileException, ValueError):
+        info = {}
+        fail("Resources/Info.plist is missing or invalid in the checked snapshot")
     if info.get("CFBundleShortVersionString") != version:
         fail("Resources/Info.plist and VERSION disagree")
-    changelog = (ROOT / "CHANGELOG.md").read_text()
+    changelog = read_text("CHANGELOG.md")
     if not re.search(r"^## " + re.escape(version) + r"(?:\s|$)", changelog, re.MULTILINE):
         fail("CHANGELOG.md must include the current release version")
 
-    license_path = ROOT / "LICENSE"
-    if not license_path.is_file():
+    if "LICENSE" not in files:
         fail("LICENSE is missing: choose a license and confirm the copyright holder before publishing")
     else:
-        license_text = license_path.read_text()
+        license_text = read_text("LICENSE")
         if len(license_text.strip()) < 200 or re.search(
             r"\[(?:year|fullname)\]|<copyright holder>|TBD|TODO",
             license_text, re.IGNORECASE,
@@ -72,11 +119,11 @@ def main():
 
     generated = re.compile(
         r"(?:^|/)(?:build|\.build|\.swiftpm|DerivedData|rollback-[^/]+|__pycache__)(?:/|$)"
-        r"|\.(?:app|dSYM)(?:/|$)|\.(?:jsonl|log|zip|tar\.gz|dmg|ips|pyc|p12|pfx|pem|key)$"
+        r"|\.(?:app|dSYM)(?:/|$)|\.(?:jsonl|log|sample\.txt|zip|tar\.gz|dmg|ips|pyc|p12|pfx|pem|key|mobileprovision|provisionprofile)$"
         r"|(?:^|/)(?:\.env(?:\.[^/]*)?|\.DS_Store|preferences[^/]*\.plist)$",
         re.IGNORECASE,
     )
-    private_path = re.compile(r"/(?:Users|home)/[A-Za-z0-9_.-]+/")
+    private_path = re.compile(r"/(?:Users|home)/[^/\r\n\"']+/")
     credentials = re.compile(
         r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
         r"|\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{30,})\b"
@@ -84,20 +131,10 @@ def main():
         r"|\bxox[baprs]-[A-Za-z0-9-]{20,}\b"
     )
     total_bytes = 0
-    for name in files:
-        path = ROOT / name
-        if path.is_symlink():
-            fail(f"{name}: review symlinks before publishing")
-            continue
-        if not path.is_file():
-            fail(f"{name}: tracked file is missing; stage its deletion or restore it")
-            continue
+    for name, data in files.items():
         if generated.search(name):
             fail(f"{name}: generated, private, or signing file must not be tracked")
-        data = path.read_bytes()
         total_bytes += len(data)
-        if len(data) > 1_000_000:
-            fail(f"{name}: review files larger than 1 MB before publishing")
         try:
             content = data.decode("utf-8")
         except UnicodeDecodeError:
@@ -108,17 +145,24 @@ def main():
             if match:
                 line = content.count("\n", 0, match.start()) + 1
                 fail(f"{name}:{line}: {label}; inspect locally without sharing its value")
-        if path.suffix == ".md":
+        for number, line in enumerate(content.splitlines(), 1):
+            if line.endswith((" ", "\t")):
+                fail(f"{name}:{number}: trailing whitespace")
+        if content and not content.endswith("\n"):
+            fail(f"{name}: missing final newline")
+        if Path(name).suffix == ".md":
             # Check inline relative links. Web links and headings are outside this check.
             for target in re.findall(r"\]\(([^\s)]+)\)", content):
                 parsed = urlsplit(target.strip("<>"))
                 if parsed.scheme or parsed.netloc or not parsed.path:
                     continue
-                destination = (path.parent / unquote(parsed.path)).resolve()
+                # Normalize lexically: unstaged symlinks must not affect index checks.
+                destination = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
                 if destination not in public_paths:
                     fail(f"{name}: local link is missing or excluded from publication: {target}")
 
-    print(f"Checked {len(files)} candidate files ({total_bytes / 1024:.1f} KiB); version {version}.")
+    snapshot = "staged" if args.staged else "candidate"
+    print(f"Checked {len(files)} {snapshot} files ({total_bytes / 1024:.1f} KiB); version {version}.")
     if ERRORS:
         for error in ERRORS:
             print(f"ERROR: {error}")

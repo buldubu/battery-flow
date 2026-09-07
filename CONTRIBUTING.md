@@ -9,6 +9,7 @@ Use an Apple silicon Mac with Swift 6 or later. The app targets macOS 13; runnin
 ```sh
 make build
 make test
+make test-tools
 make check
 make app
 ```
@@ -16,6 +17,8 @@ make app
 `make app` creates a local bundle without replacing your installed app. `make install` does replace it and preserves rollback data first. `make clean` preserves local rollback and validation directories.
 
 `make check` checks version consistency, local documentation links, license presence, and candidate files selected by Git's ignore rules. It also flags common credentials and personal absolute paths. It is a limited hygiene check; review the staged diff and source provenance before publishing.
+
+After cloning, run `make hooks` once to install the local pre-commit hook. It checks the exact staged snapshot, including whitespace, metadata, documentation links, and accidentally added private files. Existing custom hooks are preserved. Full tests and packaging run in CI; local hooks do not replace required CI checks.
 
 ## Changes and tests
 
@@ -42,6 +45,12 @@ Contributions are licensed under [MIT](LICENSE). Only contribute material you ha
 ## Versioning
 
 Keep `VERSION` and `CFBundleShortVersionString` in `Resources/Info.plist` synchronized, and document behavior changes in [CHANGELOG.md](CHANGELOG.md). Use `0.MINOR.PATCH` for feature releases and fixes while the app is pre-1.0. Tags use `vMAJOR.MINOR.PATCH`; packaged apps receive a separate UTC timestamp build number. The packager includes the license and platform notices. Distribute bundles as release assets; keep builds and local reports out of source control.
+
+## Releases
+
+Merge the version update and its changelog entry into `main`, then push an annotated tag matching `VERSION`. The release workflow runs the macOS CI matrix, verifies that the tagged commit is on `main`, and publishes the arm64 app ZIP, SHA-256 checksum, and that version's changelog entry. Existing releases are not overwritten. Current binaries use ad-hoc signing; release notes state that they are not notarized.
+
+The `CI passed` check is the required status for `main`. Repository administrators configure this in GitHub branch protection, including enforcement for administrators. Keep force pushes and branch deletion disabled. A separate approving reviewer is not required for this personal project.
 
 ## Forks
 

@@ -7,6 +7,7 @@ Versions 0.3.0 and 0.3.1 were initially distributed as local builds.
 - Add the MIT license, contributor documentation, and build and test CI.
 - Check version consistency, documentation links, and repository file hygiene.
 - Include the license and platform notices in packaged applications.
+- Add staged pre-commit checks and tag-triggered releases with version, ancestry, and package validation.
 
 ## 0.3.1 — 2026-09-07
 

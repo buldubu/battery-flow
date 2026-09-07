@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -30,6 +31,8 @@ jobs:
         run: swift --version
       - name: Check repository
         run: make check
+      - name: Test repository tools
+        run: make test-tools
       - name: Run isolated tests
         run: make test
       - name: Build application
@@ -39,3 +42,15 @@ jobs:
           codesign --verify --deep --strict build/BatteryFlow.app
           cmp LICENSE build/BatteryFlow.app/Contents/Resources/LICENSE
           cmp THIRD_PARTY_NOTICES.md build/BatteryFlow.app/Contents/Resources/THIRD_PARTY_NOTICES.md
+
+  passed:
+    name: CI passed
+    needs: validate
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every macOS check to pass
+        env:
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+        run: test "$VALIDATION_RESULT" = success

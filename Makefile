@@ -1,4 +1,4 @@
-.PHONY: build test check app install run clean
+.PHONY: build test test-tools check hooks app install run clean
 
 build:
 	swift build
@@ -6,8 +6,14 @@ build:
 test:
 	./Scripts/test.sh
 
+test-tools:
+	python3 -m unittest discover -s Tests/RepositoryTools -p 'test_*.py'
+
 check:
 	python3 Scripts/check-repository.py
+
+hooks:
+	./Scripts/install-hooks.sh
 
 app:
 	./Scripts/package-app.sh

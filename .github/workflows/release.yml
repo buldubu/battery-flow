@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: ${{ !github.event.deleted }}
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish release
+    needs: checks
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 Scripts/release.py validate "$RELEASE_TAG"
+      - name: Build application
+        run: make app
+      - name: Package and verify release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 Scripts/release.py package "$RELEASE_TAG"
+      - name: Publish the verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "build/releases/BatteryFlow-${RELEASE_TAG#v}-arm64.zip" \
+            build/releases/SHA256SUMS \
+            --verify-tag --title "Battery Flow $RELEASE_TAG" \
+            --notes-file build/releases/RELEASE_NOTES.md
