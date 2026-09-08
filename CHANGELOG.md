@@ -1,13 +1,24 @@
 # Changelog
 
-Versions 0.3.0 and 0.3.1 were initially distributed as local builds.
+Versions 0.3.0–0.3.3 were distributed as local builds.
 
-## Unreleased
+## 0.3.4 — 2026-09-08
 
-- Add the MIT license, contributor documentation, and build and test CI.
-- Check version consistency, documentation links, and repository file hygiene.
-- Include the license and platform notices in packaged applications.
-- Add staged pre-commit checks and tag-triggered releases with version, ancestry, and package validation.
+### Fixed
+
+- Show only the sailboat during Sailing, with the optional percentage when enabled.
+- Draw the actual charge level behind a centered lightning bolt while charging, without extra menu-bar width.
+- Render each menu-bar state as a single native image so its symbols and optional percentage remain visible.
+- Prevent delayed battery-only power readings from overriding macOS's charging status; suppress conflicting wattages and animation until readings agree.
+- Reset the menu-bar indicator when telemetry becomes stale.
+
+### Added
+
+- Regression tests for charging transitions, proportional battery fill, and Sailing rendering.
+- A native menu-bar item in the isolated UI review app.
+- MIT licensing, contributor documentation, repository hygiene checks, and staged pre-commit checks.
+- Build and test CI plus tag-triggered releases with version, ancestry, signing, and package validation.
+- License and platform notices in packaged applications.
 
 ## 0.3.1 — 2026-09-07
 

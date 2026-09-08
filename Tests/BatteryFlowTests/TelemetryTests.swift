@@ -24,6 +24,32 @@ struct TelemetryTests {
         #expect(PowerMath.snapshot(from: raw).state == .unavailable)
     }
 
+    @Test func chargingWithOldBatteryOnlyPowerSuppressesConflictingReadings() {
+        var raw = telemetry()
+        raw.externalConnected = true
+        raw.isCharging = true
+        raw.directAdapterPowerMilliwatts = 0
+        raw.directBatteryPowerMilliwatts = -7310
+        raw.directSystemLoadMilliwatts = 7310
+        let snapshot = PowerMath.snapshot(from: raw)
+        #expect(snapshot.state == .charging)
+        #expect(snapshot.quality == .inconsistent)
+        #expect(snapshot.adapter.watts == nil)
+        #expect(snapshot.battery.watts == nil)
+        #expect(snapshot.system.watts == nil)
+        #expect(!snapshot.canAnimate)
+        #expect(snapshot.chargePercent == raw.chargePercent)
+
+        raw.directAdapterPowerMilliwatts = 29088
+        raw.directBatteryPowerMilliwatts = 18655
+        raw.directSystemLoadMilliwatts = 10433
+        let settled = PowerMath.snapshot(from: raw)
+        #expect(settled.state == .charging)
+        #expect(settled.quality == .valid)
+        #expect(settled.canAnimate)
+        #expect(PowerMath.smooth(settled, previous: snapshot) == settled)
+    }
+
     @Test func validZeroWinsOverConflictingFallback() {
         var raw = telemetry()
         raw.amperageMilliamps = 1000
