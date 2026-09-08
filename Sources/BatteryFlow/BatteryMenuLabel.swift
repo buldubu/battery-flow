@@ -23,23 +23,24 @@ enum BatteryMenuImage {
     }()
 
     static func image(for snapshot: PowerSnapshot, showPercentage: Bool) -> NSImage {
-        let symbol = snapshot.state == .unavailable || snapshot.isStale ? "questionmark.circle" : snapshot.batteryIcon
-        let badge = badgeSymbol(for: snapshot)
+        let symbol = symbol(for: snapshot)
+        let charging = snapshot.state == .charging && !snapshot.isStale
         let percentage = showPercentage ? snapshot.chargeText : ""
-        let key = "\(symbol)|\(badge ?? "")|\(percentage)" as NSString
+        let key = "\(symbol)|\(percentage)|\(charging ? snapshot.chargeText : "")" as NSString
         if let cached = cache.object(forKey: key) { return cached }
 
         let text = NSAttributedString(string: percentage, attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
             .foregroundColor: NSColor.black
         ])
-        let iconWidth: CGFloat = badge == nil ? 25 : 45
+        let iconWidth: CGFloat = symbol == "sailboat.fill" ? 18 : 25
         let width = iconWidth + (showPercentage ? 4 + ceil(text.size().width) : 0)
         let image = NSImage(size: NSSize(width: width, height: 18))
         image.lockFocus()
-        drawSymbol(symbol, in: NSRect(x: 0, y: 0, width: 25, height: 18))
-        if let badge {
-            drawSymbol(badge, in: NSRect(x: 29, y: 0, width: 16, height: 18))
+        if charging {
+            drawChargingBattery(percent: snapshot.chargePercent)
+        } else {
+            drawSymbol(symbol, in: NSRect(x: 0, y: 0, width: iconWidth, height: 18))
         }
         if showPercentage {
             text.draw(at: NSPoint(x: iconWidth + 4, y: floor((18 - text.size().height) / 2)))
@@ -50,13 +51,46 @@ enum BatteryMenuImage {
         return image
     }
 
-    static func badgeSymbol(for snapshot: PowerSnapshot) -> String? {
-        guard !snapshot.isStale else { return nil }
-        switch snapshot.state {
-        case .charging: return "bolt.fill"
-        case .paused: return "sailboat.fill"
-        default: return nil
-        }
+    static func symbol(for snapshot: PowerSnapshot) -> String {
+        guard snapshot.state != .unavailable, !snapshot.isStale else { return "questionmark.circle" }
+        return snapshot.state == .paused ? "sailboat.fill" : snapshot.batteryIcon
+    }
+
+    private static func drawChargingBattery(percent: Int?) {
+        NSColor.black.setFill()
+        NSColor.black.setStroke()
+        let outline = NSBezierPath(roundedRect: NSRect(x: 0.75, y: 3, width: 21.5, height: 12),
+                                   xRadius: 2.5, yRadius: 2.5)
+        outline.lineWidth = 1.4
+        outline.stroke()
+        NSBezierPath(roundedRect: NSRect(x: 23.4, y: 6.5, width: 1.6, height: 5),
+                     xRadius: 0.8, yRadius: 0.8).fill()
+
+        let fraction = CGFloat(percent.flatMap { (0...100).contains($0) ? $0 : nil } ?? 0) / 100
+        let interior = NSRect(x: 3, y: 5.25, width: 17, height: 7.5)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: interior, xRadius: 0.8, yRadius: 0.8).addClip()
+        NSRect(x: interior.minX, y: interior.minY, width: interior.width * fraction, height: interior.height).fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        // Clear a narrow halo so the centered bolt stays legible across filled and empty areas.
+        let bolt = NSBezierPath()
+        bolt.move(to: NSPoint(x: 13.2, y: 16.5))
+        bolt.line(to: NSPoint(x: 7.5, y: 8))
+        bolt.line(to: NSPoint(x: 10.7, y: 8))
+        bolt.line(to: NSPoint(x: 9, y: 1.5))
+        bolt.line(to: NSPoint(x: 15.5, y: 10.5))
+        bolt.line(to: NSPoint(x: 12.1, y: 10.5))
+        bolt.close()
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.compositingOperation = .destinationOut
+        bolt.lineWidth = 1.6
+        bolt.lineJoinStyle = .round
+        bolt.stroke()
+        bolt.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.black.setFill()
+        bolt.fill()
     }
 
     private static func drawSymbol(_ name: String, in bounds: NSRect) {
