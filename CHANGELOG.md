@@ -2,6 +2,11 @@
 
 Versions 0.3.0 and 0.3.1 were initially distributed as local builds.
 
+## 0.3.4 — 2026-09-08
+
+- Show a lightning bolt beside the charge-level menu-bar battery while charging.
+- Switch between the lightning bolt and sailboat as the power state changes, and remove state badges when readings become stale.
+
 ## 0.3.3 — 2026-09-08
 
 - Prevent old battery-only power readings from displaying On Battery when macOS reports AC charging.

@@ -18,12 +18,33 @@ struct BatteryMenuLabelTests {
     }
 
     @Test func onlyFreshPausedStateShowsSailboat() {
-        for state in [PowerState.onBattery, .charging, .charged, .supplementing, .unavailable] {
+        for state in [PowerState.onBattery, .charged, .supplementing, .unavailable] {
             let image = BatteryMenuImage.image(for: PowerSnapshot(state: state, chargePercent: 80), showPercentage: false)
             #expect(image.size.width == 25)
         }
         let stale = PowerSnapshot(state: .paused, chargePercent: 80, isStale: true)
         #expect(BatteryMenuImage.image(for: stale, showPercentage: false).size.width == 25)
+    }
+
+    @Test func chargingDrawsBoltAndUpdatesWhenStateChanges() throws {
+        let charging = PowerSnapshot(state: .charging, chargePercent: 80)
+        let sailing = PowerSnapshot(state: .paused, chargePercent: 80)
+        #expect(BatteryMenuImage.badgeSymbol(for: charging) == "bolt.fill")
+        #expect(BatteryMenuImage.badgeSymbol(for: sailing) == "sailboat.fill")
+        let image = BatteryMenuImage.image(for: charging, showPercentage: false)
+        #expect(image.isTemplate)
+        #expect(image.size.width == 45)
+        let data = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+        #expect(hasInk(bitmap, from: 0, to: 25, imageWidth: image.size.width))
+        #expect(hasInk(bitmap, from: 29, to: 45, imageWidth: image.size.width))
+        #expect(data != BatteryMenuImage.image(for: sailing, showPercentage: false).tiffRepresentation)
+        #expect(BatteryMenuImage.badgeSymbol(for: charging.stale(message: "Read failed")) == nil)
+        #expect(BatteryMenuImage.image(for: charging.stale(message: "Read failed"), showPercentage: false).size.width == 25)
+        let percentageImage = BatteryMenuImage.image(for: charging, showPercentage: true)
+        let percentageData = try #require(percentageImage.tiffRepresentation)
+        let percentageBitmap = try #require(NSBitmapImageRep(data: percentageData))
+        #expect(hasInk(percentageBitmap, from: 49, to: percentageImage.size.width, imageWidth: percentageImage.size.width))
     }
 
     @Test func percentageIsDrawnInsideNativeImage() throws {

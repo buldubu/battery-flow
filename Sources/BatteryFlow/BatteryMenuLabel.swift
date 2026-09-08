@@ -24,22 +24,22 @@ enum BatteryMenuImage {
 
     static func image(for snapshot: PowerSnapshot, showPercentage: Bool) -> NSImage {
         let symbol = snapshot.state == .unavailable || snapshot.isStale ? "questionmark.circle" : snapshot.batteryIcon
-        let sailing = snapshot.state == .paused && !snapshot.isStale
+        let badge = badgeSymbol(for: snapshot)
         let percentage = showPercentage ? snapshot.chargeText : ""
-        let key = "\(symbol)|\(sailing)|\(percentage)" as NSString
+        let key = "\(symbol)|\(badge ?? "")|\(percentage)" as NSString
         if let cached = cache.object(forKey: key) { return cached }
 
         let text = NSAttributedString(string: percentage, attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
             .foregroundColor: NSColor.black
         ])
-        let iconWidth: CGFloat = sailing ? 45 : 25
+        let iconWidth: CGFloat = badge == nil ? 25 : 45
         let width = iconWidth + (showPercentage ? 4 + ceil(text.size().width) : 0)
         let image = NSImage(size: NSSize(width: width, height: 18))
         image.lockFocus()
         drawSymbol(symbol, in: NSRect(x: 0, y: 0, width: 25, height: 18))
-        if sailing {
-            drawSymbol("sailboat.fill", in: NSRect(x: 29, y: 0, width: 16, height: 18))
+        if let badge {
+            drawSymbol(badge, in: NSRect(x: 29, y: 0, width: 16, height: 18))
         }
         if showPercentage {
             text.draw(at: NSPoint(x: iconWidth + 4, y: floor((18 - text.size().height) / 2)))
@@ -48,6 +48,15 @@ enum BatteryMenuImage {
         image.isTemplate = true
         cache.setObject(image, forKey: key)
         return image
+    }
+
+    static func badgeSymbol(for snapshot: PowerSnapshot) -> String? {
+        guard !snapshot.isStale else { return nil }
+        switch snapshot.state {
+        case .charging: return "bolt.fill"
+        case .paused: return "sailboat.fill"
+        default: return nil
+        }
     }
 
     private static func drawSymbol(_ name: String, in bounds: NSRect) {
