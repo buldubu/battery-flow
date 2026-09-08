@@ -2,8 +2,11 @@
 
 Versions 0.3.0 and 0.3.1 were initially distributed as local builds.
 
-## Unreleased
+## 0.3.2 — 2026-09-08
 
+- Restore the Sailing heading and sailboat for connected power with charging paused.
+- Render the battery, sailboat, and optional percentage as one native menu-bar image so all parts remain visible.
+- Add native menu-bar coverage to the UI review app.
 - Add the MIT license, contributor documentation, and build and test CI.
 - Check version consistency, documentation links, and repository file hygiene.
 - Include the license and platform notices in packaged applications.

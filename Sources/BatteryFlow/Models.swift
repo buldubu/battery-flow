@@ -13,7 +13,7 @@ enum PowerState: String, Codable, Sendable {
         case .onBattery: "On Battery"
         case .charging: "Charging"
         case .charged: "Fully Charged"
-        case .paused: "Not Charging"
+        case .paused: "Sailing"
         case .supplementing: "Adapter + Battery"
         case .unavailable: "Telemetry Unavailable"
         }
@@ -33,7 +33,7 @@ enum PowerState: String, Codable, Sendable {
         case .onBattery: "battery.50percent"
         case .charging: "bolt.fill"
         case .charged: "checkmark.circle"
-        case .paused: "pause.circle"
+        case .paused: "sailboat.fill"
         case .supplementing: "arrow.triangle.merge"
         case .unavailable: "questionmark.circle"
         }

@@ -7,7 +7,7 @@ enum ReviewScenario: String, CaseIterable, Identifiable, Sendable {
     case live = "This Mac"
     case charging = "Charging"
     case charged = "Fully charged"
-    case paused = "Not charging"
+    case paused = "Sailing"
     case supplementing = "Adapter + battery"
     case onBattery = "On battery"
     case inconsistent = "Inconsistent power"
@@ -160,6 +160,15 @@ struct BatteryFlowUIReviewApp: App {
     @NSApplicationDelegateAdaptor(ReviewDelegate.self) private var delegate
     @StateObject private var model = AppModel()
     var body: some Scene {
+        MenuBarExtra {
+            Text(model.monitor.snapshot.state.title)
+            Text(model.monitor.snapshot.state.detail)
+            Toggle("Show percentage", isOn: Binding(
+                get: { model.preferences.showPercentage },
+                set: { model.preferences.showPercentage = $0 }))
+        } label: {
+            BatteryMenuLabel(monitor: model.monitor, preferences: model.preferences)
+        }
         WindowGroup("Battery Flow UI Review") {
             VStack(spacing: 0) {
                 HStack {

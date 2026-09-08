@@ -13,7 +13,7 @@ Battery Flow displays live power, charge, temperature, battery health, and local
 - Validated readings, visible stale-data warnings, and recovery for partially damaged history files.
 - Local operation without accounts, analytics, or network telemetry.
 
-The sailboat beside the battery icon means **Not Charging**: an adapter is connected and charging is paused. The battery icon reflects the current charge level.
+The sailboat beside the battery icon means **Sailing**: an adapter is connected and charging is paused. The battery icon reflects the current charge level.
 
 ## Requirements
 
