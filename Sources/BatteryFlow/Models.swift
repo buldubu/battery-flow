@@ -155,8 +155,12 @@ enum PowerMath {
         if adapter.watts == nil, let s = system.watts, let b = battery.watts { adapter = calculated(s + b) }
         if battery.watts == nil, let a = adapter.watts, let s = system.watts { battery = calculated(a - s, signed: true) }
 
+        // PowerTelemetryData can still describe discharge just after macOS reports AC charging.
+        // A balanced set of old wattages is not sufficient evidence for an On Battery label.
+        let chargingConflict = raw.externalConnected == true && raw.isCharging == true
+            && (battery.watts.map { $0 < -0.2 } ?? false) && (adapter.watts ?? 0) <= 0.05
         var quality: PowerQuality = [adapter, battery, system].allSatisfy { $0.watts != nil } ? .valid : .partial
-        if !consistent(adapter: adapter.watts, battery: battery.watts, system: system.watts,
+        if chargingConflict || !consistent(adapter: adapter.watts, battery: battery.watts, system: system.watts,
                        externalConnected: raw.externalConnected) {
             quality = .inconsistent
             adapter = .unavailable
@@ -180,8 +184,9 @@ enum PowerMath {
             externalConnected: raw.externalConnected, isCharging: raw.isCharging, isFullyCharged: raw.isFullyCharged,
             adapterRatingWatts: raw.adapterRatingWatts.flatMap { valid(Double($0), in: 1...500) },
             adapter: adapter, battery: battery, system: system, quality: quality,
-            errorMessage: quality == .inconsistent ? "Power readings disagree. Waiting for a consistent sample."
-                : (raw.externalConnected == nil ? "Power source information is unavailable." : nil)
+            errorMessage: chargingConflict ? "macOS reports charging, but power readings disagree. Waiting for consistent power data."
+                : (quality == .inconsistent ? "Power readings disagree. Waiting for a consistent sample."
+                : (raw.externalConnected == nil ? "Power source information is unavailable." : nil))
         )
     }
 

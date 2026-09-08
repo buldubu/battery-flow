@@ -2,6 +2,12 @@
 
 Versions 0.3.0 and 0.3.1 were initially distributed as local builds.
 
+## 0.3.3 — 2026-09-08
+
+- Prevent old battery-only power readings from displaying On Battery when macOS reports AC charging.
+- Suppress conflicting wattages and flow animation until power telemetry agrees; preserve the macOS charging state and charge percentage.
+- Add a regression test for charging transitions with delayed power readings.
+
 ## 0.3.2 — 2026-09-08
 
 - Restore the Sailing heading and sailboat for connected power with charging paused.
