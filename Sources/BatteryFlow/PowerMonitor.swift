@@ -24,6 +24,10 @@ final class PowerMonitor: ObservableObject {
     private var isReading = false
     private var refreshPending = false
     private var healthAttempt: Date?
+    private var transitionUntil: Date?
+    private var powerTransitionPending = false
+    private var powerFreshness = PowerSampleFreshness()
+    private var powerPresentation = PowerPresentation()
 
     init(history: HistoryStore, reader: any TelemetryReading = BatteryTelemetryReader(),
          healthReader: any HealthReading = SystemProfilerHealthReader(), clock: any MonitorClock = SystemMonitorClock(),
@@ -46,6 +50,7 @@ final class PowerMonitor: ObservableObject {
         if observeSystem {
             isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
             events = PowerEvents(onPowerChange: { [weak self] in self?.powerChanged() },
+                onBatteryUpdate: { [weak self] in self?.powerInformationChanged() },
                 onModeChange: { [weak self] in self?.setLowPowerMode(ProcessInfo.processInfo.isLowPowerModeEnabled) },
                 onSleep: { [weak self] in self?.setSleeping(true) },
                 onWake: { [weak self] in self?.setSleeping(false) })
@@ -60,6 +65,9 @@ final class PowerMonitor: ObservableObject {
         pollingTask?.cancel()
         healthTask?.cancel()
         eventTask?.cancel()
+        eventTask = nil
+        transitionUntil = nil
+        powerTransitionPending = false
         events?.stop()
         events = nil
     }
@@ -79,9 +87,12 @@ final class PowerMonitor: ObservableObject {
     func setSleeping(_ asleep: Bool) {
         suspended = asleep
         if asleep {
+            powerFreshness.invalidate()
             pollingTask?.cancel()
             eventTask?.cancel()
             eventTask = nil
+            transitionUntil = nil
+            powerTransitionPending = false
             snapshot = snapshot.stale(message: "Waiting for the Mac to wake.")
         } else {
             snapshot = snapshot.stale(message: "Refreshing after wake.")
@@ -106,8 +117,17 @@ final class PowerMonitor: ObservableObject {
                 var raw = try await reader.read()
                 guard !Task.isCancelled, !suspended else { return }
                 raw.timestamp = clock.now
-                let next = PowerMath.snapshot(from: raw)
-                snapshot = PowerMath.smooth(next, previous: snapshot)
+                let sourceChanged = snapshot.externalConnected.flatMap { previous in
+                    raw.externalConnected.map { previous != $0 }
+                } ?? false
+                let chargingChanged = snapshot.isCharging.flatMap { previous in
+                    raw.isCharging.map { previous != $0 }
+                } ?? false
+                if sourceChanged || chargingChanged {
+                    beginTransitionSampling(reset: true)
+                }
+                let next = powerFreshness.snapshot(from: raw)
+                snapshot = powerPresentation.present(next)
                 if raw.healthCondition != nil || raw.healthEstimate != nil {
                     health.condition = BatteryHealthSnapshot.nonempty(raw.healthCondition)
                     health.estimate = BatteryHealthSnapshot.nonempty(raw.healthEstimate)
@@ -162,41 +182,95 @@ final class PowerMonitor: ObservableObject {
         guard isRunning, !suspended else { return }
         pollingTask?.cancel()
         let clock = self.clock
-        let interval = Self.interval(panelVisible: panelVisible, lowPowerMode: isLowPowerMode)
         pollingTask = Task { [weak self] in
             await self?.refresh()
             while !Task.isCancelled {
+                guard let interval = self?.pollingInterval else { break }
                 do { try await clock.sleep(seconds: interval) } catch { break }
                 guard !Task.isCancelled else { break }
                 await self?.refresh()
             }
         }
     }
-    private func powerChanged() {
-        guard eventTask == nil, !suspended, isRunning else { return }
+    private var pollingInterval: TimeInterval {
+        let normal = Self.interval(panelVisible: panelVisible, lowPowerMode: isLowPowerMode)
+        let fast = isLowPowerMode ? 2.0 : 1.0
+        if snapshot.isAwaitingPowerData { return min(normal, fast) }
+        if let deadline = transitionUntil, clock.now < deadline { return min(normal, fast) }
+        // Charge Limit can start charging without changing the connected power source
+        // or delivering the public source notification. Avoid another 30-second delay.
+        if snapshot.externalConnected == true && snapshot.isCharging != true {
+            return min(normal, isLowPowerMode ? 4 : 2)
+        }
+        return normal
+    }
+
+    private func beginTransitionSampling(reset: Bool = false) {
+        // Do not extend an active window for duplicate power notifications.
+        if reset || (transitionUntil.map({ clock.now >= $0 }) ?? true) {
+            transitionUntil = clock.now.addingTimeInterval(45)
+        }
+    }
+
+    func powerChanged() {
+        schedulePowerRefresh(sourceChanged: true)
+    }
+    func powerInformationChanged() { schedulePowerRefresh(sourceChanged: false) }
+
+    private func schedulePowerRefresh(sourceChanged: Bool) {
+        guard !suspended, isRunning else { return }
+        powerTransitionPending = powerTransitionPending || sourceChanged
+        guard eventTask == nil else { return }
         let clock = self.clock
         eventTask = Task { [weak self] in
             do { try await clock.sleep(seconds: 0.5) } catch { return }
             self?.eventTask = nil
             guard !Task.isCancelled else { return }
-            await self?.refresh()
+            guard let self else { return }
+            if powerTransitionPending { beginTransitionSampling() }
+            powerTransitionPending = false
+            reschedule()
         }
     }
 }
 
 @MainActor
-private final class PowerEvents {
+final class PowerEvents {
+    static let chargingIconographyNotification = "com.apple.system.powersources.chargingiconography"
+    private static let immediateNotificationNames = [
+        kIOPSNotifyPowerSource,
+        chargingIconographyNotification
+    ]
     private var source: CFRunLoopSource?
     private var tokens: [(NotificationCenter, NSObjectProtocol)] = []
     private let onPowerChange: @MainActor () -> Void
+    private let onBatteryUpdate: @MainActor () -> Void
+    private let powerNotificationCenter: CFNotificationCenter
+    private var stopped = false
 
-    init(onPowerChange: @escaping @MainActor () -> Void, onModeChange: @escaping @MainActor () -> Void,
-         onSleep: @escaping @MainActor () -> Void, onWake: @escaping @MainActor () -> Void) {
+    init(onPowerChange: @escaping @MainActor () -> Void, onBatteryUpdate: @escaping @MainActor () -> Void, onModeChange: @escaping @MainActor () -> Void,
+         onSleep: @escaping @MainActor () -> Void, onWake: @escaping @MainActor () -> Void,
+         powerNotificationCenter: CFNotificationCenter = CFNotificationCenterGetDarwinNotifyCenter()) {
         self.onPowerChange = onPowerChange
+        self.onBatteryUpdate = onBatteryUpdate
+        self.powerNotificationCenter = powerNotificationCenter
+        for name in Self.immediateNotificationNames {
+            CFNotificationCenterAddObserver(powerNotificationCenter, Unmanaged.passUnretained(self).toOpaque(), { _, context, _, _, _ in
+                guard let context else { return }
+                let observer = Unmanaged<PowerEvents>.fromOpaque(context).takeUnretainedValue()
+                Task { @MainActor in
+                    guard !observer.stopped else { return }
+                    observer.onPowerChange()
+                }
+            }, name as CFString, nil, .deliverImmediately)
+        }
         source = IOPSNotificationCreateRunLoopSource({ context in
             guard let context else { return }
             let observer = Unmanaged<PowerEvents>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor in observer.onPowerChange() }
+            Task { @MainActor in
+                guard !observer.stopped else { return }
+                observer.onBatteryUpdate()
+            }
         }, Unmanaged.passUnretained(self).toOpaque())?.takeRetainedValue()
         if let source { CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes) }
         observe(.default, name: .NSProcessInfoPowerStateDidChange, action: onModeChange)
@@ -210,6 +284,11 @@ private final class PowerEvents {
         tokens.append((center, token))
     }
     func stop() {
+        stopped = true
+        for name in Self.immediateNotificationNames {
+            CFNotificationCenterRemoveObserver(powerNotificationCenter, Unmanaged.passUnretained(self).toOpaque(),
+                CFNotificationName(name as CFString), nil)
+        }
         if let source { CFRunLoopSourceInvalidate(source) }
         source = nil
         for (center, token) in tokens { center.removeObserver(token) }

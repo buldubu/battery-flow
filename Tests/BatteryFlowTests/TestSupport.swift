@@ -94,3 +94,40 @@ func encodeHistory(_ points: [HistoryPoint]) throws -> Data {
 func persistence(_ files: MemoryHistoryFiles) -> HistoryPersistence {
     HistoryPersistence(fileURL: URL(fileURLWithPath: "/test-only/history.jsonl"), files: files)
 }
+
+final class ManualPollingClock: MonitorClock, @unchecked Sendable {
+    private struct Waiter {
+        let deadline: Date
+        let interval: TimeInterval
+        let continuation: CheckedContinuation<Void, any Error>
+    }
+    private let lock = NSLock()
+    private var date = testDate
+    private var waiters: [UUID: Waiter] = [:]
+    var now: Date { lock.withLock { date } }
+    var intervals: [TimeInterval] { lock.withLock { waiters.values.map(\.interval).sorted() } }
+
+    func sleep(seconds: TimeInterval) async throws {
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                lock.withLock {
+                    if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                    else { waiters[id] = Waiter(deadline: date.addingTimeInterval(seconds), interval: seconds, continuation: continuation) }
+                }
+            }
+        } onCancel: {
+            let waiter = self.lock.withLock { self.waiters.removeValue(forKey: id) }
+            waiter?.continuation.resume(throwing: CancellationError())
+        }
+    }
+    func advance(_ seconds: TimeInterval) {
+        let ready = lock.withLock {
+            date = date.addingTimeInterval(seconds)
+            let ready = waiters.filter { $0.value.deadline <= date }
+            for id in ready.keys { waiters.removeValue(forKey: id) }
+            return ready.values.map(\.continuation)
+        }
+        for continuation in ready { continuation.resume() }
+    }
+}

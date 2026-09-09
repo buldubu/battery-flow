@@ -117,12 +117,13 @@ struct PowerFlowView: View {
                     Text("Raw charge \(hardware, specifier: "%.1f")%")
                 }
                 Spacer(minLength: 12)
-                if let timestamp = monitor.snapshot.timestamp {
-                    Text(monitor.snapshot.isStale ? "Last reading" : "Updated")
+                if let timestamp = monitor.snapshot.isAwaitingPowerData
+                    ? monitor.snapshot.powerUpdatedAt : (monitor.snapshot.powerUpdatedAt ?? monitor.snapshot.timestamp) {
+                    Text(monitor.snapshot.isStale || monitor.snapshot.isAwaitingPowerData ? "Last power reading" : "Power updated")
                     Text(timestamp, style: .time)
                 }
             }
-            if monitor.snapshot.quality == .partial && !monitor.snapshot.isStale {
+            if monitor.snapshot.quality == .partial && !monitor.snapshot.isStale && !monitor.snapshot.isAwaitingPowerData {
                 Text("Some power readings are unavailable.")
             } else if monitor.snapshot.isCalculated {
                 Text("Power includes calculated readings.")

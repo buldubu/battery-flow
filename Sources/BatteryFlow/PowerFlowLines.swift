@@ -74,18 +74,19 @@ final class FlowLinesView: NSView {
             structure[1].lineWidth = 3
             structure[1].strokeColor = NSColor.secondaryLabelColor.withAlphaComponent(0.12).cgColor
 
+            let powerIsCurrent = !snapshot.isAwaitingPowerData && snapshot.quality != .inconsistent && !snapshot.isStale
             let directPower: Double
-            if snapshot.externalConnected == true,
+            if powerIsCurrent, snapshot.externalConnected == true,
                let adapterPower = snapshot.adapterPowerWatts, let systemPower = snapshot.systemPowerWatts {
                 directPower = min(adapterPower, systemPower)
             } else { directPower = 0 }
             configure(flows[0], path: direct, power: directPower, color: .systemBlue)
             configure(flows[1], path: path(from: adapter, to: battery,
                 control: CGPoint(x: bounds.width * 0.34, y: bounds.height * 0.7)),
-                power: snapshot.externalConnected == true && (snapshot.batteryPowerWatts ?? 0) > 0.2
+                power: powerIsCurrent && snapshot.externalConnected == true && (snapshot.batteryPowerWatts ?? 0) > 0.2
                     ? snapshot.batteryPowerWatts ?? 0 : 0, color: .systemGreen)
             configure(flows[2], path: discharge,
-                power: (snapshot.batteryPowerWatts ?? 0) < -0.2 ? -(snapshot.batteryPowerWatts ?? 0) : 0,
+                power: powerIsCurrent && (snapshot.batteryPowerWatts ?? 0) < -0.2 ? -(snapshot.batteryPowerWatts ?? 0) : 0,
                 color: .systemOrange)
         }
     }

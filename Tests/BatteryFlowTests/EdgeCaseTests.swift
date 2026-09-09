@@ -44,11 +44,15 @@ struct EdgeCaseTests {
         #expect(expired.error != nil)
     }
 
-    @Test func reportedIdlePowerTakesPrecedenceOverLaggingChargingFlag() {
+    @Test func macOSChargingStatusTakesPrecedenceOverDelayedIdlePower() {
         var raw = telemetry()
         raw.isCharging = true
-        #expect(PowerMath.snapshot(from: raw).state == .paused)
+        #expect(PowerMath.snapshot(from: raw).state == .charging)
+        #expect(PowerMath.snapshot(from: raw).adapter.watts == nil)
+        #expect(PowerMath.snapshot(from: raw).quality == .inconsistent)
         raw.isFullyCharged = true
+        #expect(PowerMath.snapshot(from: raw).state == .charging)
+        raw.isCharging = false
         #expect(PowerMath.snapshot(from: raw).state == .charged)
     }
 
@@ -129,7 +133,7 @@ struct EdgeCaseTests {
         raw.directAdapterPowerMilliwatts = 0
         raw.directBatteryPowerMilliwatts = -10000
         let snapshot = PowerMath.snapshot(from: raw)
-        #expect(snapshot.state == .onBattery)
+        #expect(snapshot.state == .paused)
         #expect(snapshot.quality == .valid)
         raw.directAdapterPowerMilliwatts = nil
         raw.systemVoltageInMillivolts = 0
