@@ -71,8 +71,10 @@ def validate(rows):
             state = point.get("state")
             if state == "charging" and battery < -0.2 or state == "supplementing" and battery > 0.2:
                 reason.append("state contradicts battery direction")
-            if state in ("charged", "paused") and abs(battery) > 0.2:
-                reason.append("idle state contradicts battery flow")
+            if state == "charged" and abs(battery) > 0.2:
+                reason.append("charged state contradicts battery flow")
+            if state == "paused" and battery > 0.2:
+                reason.append("paused state contradicts battery direction")
         if reason:
             errors.append({"line": index, "reasons": reason})
     return {"legacy_power_anomalies": legacy_anomalies, "flagged_new_samples": flagged, "validation_errors": errors}

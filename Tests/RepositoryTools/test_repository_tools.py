@@ -13,6 +13,9 @@ SOURCE = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("release", SOURCE / "Scripts/release.py")
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+soak_spec = importlib.util.spec_from_file_location("soak_test", SOURCE / "Scripts/soak-test.py")
+soak_test = importlib.util.module_from_spec(soak_spec)
+soak_spec.loader.exec_module(soak_test)
 
 
 class RepositoryFixture(unittest.TestCase):
@@ -196,6 +199,44 @@ class ReleaseNotes(unittest.TestCase):
         for tag in ("main", "0.3.1", "v00.3.1", "v0.3.1-beta", "v0.3.1;exit", "v0.3.1\n"):
             with self.assertRaises(ValueError):
                 release.version_for_tag(tag)
+
+
+class SoakValidation(unittest.TestCase):
+    @staticmethod
+    def point(state, adapter, battery, system):
+        return {
+            "schemaVersion": 2,
+            "timestamp": 1_788_979_200,
+            "quality": "valid",
+            "adapterPowerWatts": adapter,
+            "batteryPowerWatts": battery,
+            "systemPowerWatts": system,
+            "adapterSource": "reported",
+            "batterySource": "reported",
+            "systemSource": "reported",
+            "externalConnected": True,
+            "state": state,
+            "chargePercent": 80,
+            "temperatureCelsius": 35,
+        }
+
+    def test_sailing_allows_connected_battery_discharge(self):
+        report = soak_test.validate([self.point("paused", 0, -6, 6)])
+        self.assertEqual(report["validation_errors"], [])
+
+    def test_sailing_rejects_battery_charge(self):
+        report = soak_test.validate([self.point("paused", 10, 2, 8)])
+        self.assertEqual(
+            report["validation_errors"][0]["reasons"],
+            ["paused state contradicts battery direction"],
+        )
+
+    def test_fully_charged_rejects_active_battery_flow(self):
+        report = soak_test.validate([self.point("charged", 10, 2, 8)])
+        self.assertEqual(
+            report["validation_errors"][0]["reasons"],
+            ["charged state contradicts battery flow"],
+        )
 
 
 if __name__ == "__main__":

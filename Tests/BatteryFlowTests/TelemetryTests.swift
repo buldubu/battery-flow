@@ -1,4 +1,5 @@
 import Foundation
+import IOKit.ps
 import Testing
 @testable import BatteryFlow
 
@@ -13,7 +14,8 @@ struct TelemetryTests {
         raw.directBatteryPowerMilliwatts = 2000
         raw.directAdapterPowerMilliwatts = 12000
         #expect(PowerMath.snapshot(from: raw).state == .charging)
-        // A lagging charging flag must never contradict measured battery discharge.
+        // Supplementing requires discharge telemetry without an active macOS charging flag.
+        raw.isCharging = false
         raw.directBatteryPowerMilliwatts = -2000
         raw.directAdapterPowerMilliwatts = 8000
         #expect(PowerMath.snapshot(from: raw).state == .supplementing)
@@ -22,6 +24,19 @@ struct TelemetryTests {
         #expect(PowerMath.snapshot(from: raw).state == .onBattery)
         raw.externalConnected = nil
         #expect(PowerMath.snapshot(from: raw).state == .unavailable)
+    }
+
+    @Test func connectedBatteryOnlySampleIsNotReportedAsDisconnected() {
+        var raw = telemetry()
+        raw.externalConnected = true
+        raw.isCharging = false
+        raw.directAdapterPowerMilliwatts = 0
+        raw.directBatteryPowerMilliwatts = -6000
+        raw.directSystemLoadMilliwatts = 6000
+        let snapshot = PowerMath.snapshot(from: raw)
+        #expect(snapshot.state == .paused)
+        #expect(snapshot.externalConnected == true)
+        #expect(snapshot.quality == .valid)
     }
 
     @Test func chargingWithOldBatteryOnlyPowerSuppressesConflictingReadings() {
@@ -48,6 +63,39 @@ struct TelemetryTests {
         #expect(settled.quality == .valid)
         #expect(settled.canAnimate)
         #expect(PowerMath.smooth(settled, previous: snapshot) == settled)
+    }
+
+    @Test func currentMacOSChargingStatusWinsOverOldRegistryZeros() {
+        let raw = BatteryTelemetryReader.decode([
+            "ExternalConnected": false, "IsCharging": false, "CurrentCapacity": 70,
+            "PowerTelemetryData": ["SystemPowerIn": 0, "BatteryPower": 0, "SystemLoad": 0]
+        ], powerSource: [
+            kIOPSPowerSourceStateKey: kIOPSACPowerValue,
+            kIOPSIsChargingKey: true, kIOPSCurrentCapacityKey: 71
+        ])
+        let snapshot = PowerMath.snapshot(from: raw)
+        #expect(snapshot.state == .charging)
+        #expect(snapshot.chargePercent == 71)
+        #expect(snapshot.quality == .inconsistent)
+        #expect(snapshot.adapter.watts == nil)
+        #expect(snapshot.battery.watts == nil)
+        #expect(!snapshot.canAnimate)
+        #expect(snapshot.errorMessage != nil)
+    }
+
+    @Test func chargingDoesNotDisplayOldIdleOrDischargingWattages() {
+        for power: Int64 in [0, -2000] {
+            var raw = telemetry()
+            raw.isCharging = true
+            raw.directBatteryPowerMilliwatts = power
+            raw.directAdapterPowerMilliwatts = 10000 + power
+            let snapshot = PowerMath.snapshot(from: raw)
+            #expect(snapshot.state == .charging)
+            #expect(snapshot.quality == .inconsistent)
+            #expect(snapshot.adapter.watts == nil)
+            #expect(snapshot.battery.watts == nil)
+            #expect(!snapshot.canAnimate)
+        }
     }
 
     @Test func validZeroWinsOverConflictingFallback() {

@@ -56,7 +56,11 @@ actor BatteryTelemetryReader: TelemetryReading {
             directBatteryPowerMilliwatts: signedInteger(telemetry["BatteryPower"]),
             directSystemLoadMilliwatts: signedInteger(telemetry["SystemLoad"]),
             healthCondition: BatteryHealthSnapshot.nonempty(powerSource[kIOPSBatteryHealthConditionKey] as? String),
-            healthEstimate: BatteryHealthSnapshot.nonempty(powerSource[kIOPSBatteryHealthKey] as? String)
+            healthEstimate: BatteryHealthSnapshot.nonempty(powerSource[kIOPSBatteryHealthKey] as? String),
+            powerSampleCounter: signedInteger(telemetry["SystemPowerInAccumulatorCount"]).flatMap { $0 >= 0 ? $0 : nil },
+            batteryPowerSampleCounter: signedInteger(telemetry["BatteryPowerAccumulatorCount"]).flatMap { $0 >= 0 ? $0 : nil },
+            systemLoadSampleCounter: signedInteger(telemetry["SystemLoadAccumulatorCount"]).flatMap { $0 >= 0 ? $0 : nil },
+            registryExternalConnected: boolean(properties["ExternalConnected"])
         )
     }
 

@@ -2,6 +2,23 @@
 
 Versions 0.3.0–0.3.3 were distributed as local builds.
 
+## Unreleased
+
+## 0.3.5 — 2026-09-09
+
+### Fixed
+
+- Refresh promptly after adapter and charging-status changes, including charge-limit changes that do not disconnect the cable.
+- Keep retrying while macOS power telemetry settles so hidden status no longer waits for the normal 30-second polling interval.
+- Treat macOS charging status as authoritative when older wattage samples disagree, and exclude those samples from animation and history.
+- Accept fresh battery and system-load samples while adapter input remains idle, preventing connected non-charging telemetry from remaining blank.
+- Keep the last coherent same-source wattages visible during a transition without presenting them as current measurements.
+- Distinguish connected battery discharge from a disconnected Mac while retaining Adapter + Battery when the adapter also supplies power.
+
+### Changed
+
+- Update the soak validator for legitimate battery discharge during a connected, non-charging state.
+
 ## 0.3.4 — 2026-09-08
 
 ### Fixed

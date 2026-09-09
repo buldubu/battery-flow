@@ -75,13 +75,15 @@ struct PowerSnapshot: Equatable, Sendable {
     var quality: PowerQuality = .partial
     var isStale = false
     var errorMessage: String?
+    var isAwaitingPowerData = false
+    var powerUpdatedAt: Date?
 
     var adapterPowerWatts: Double? { adapter.watts }
     var batteryPowerWatts: Double? { battery.watts }
     var systemPowerWatts: Double? { system.watts }
     var chargeText: String { chargePercent.map { "\($0)%" } ?? "—" }
     var canAnimate: Bool {
-        guard !isStale, state != .unavailable, quality != .inconsistent else { return false }
+        guard !isStale, !isAwaitingPowerData, state != .unavailable, quality != .inconsistent else { return false }
         return abs(battery.watts ?? 0) > 0.2 || ((adapter.watts ?? 0) > 0.05 && (system.watts ?? 0) > 0.05)
     }
     var isCalculated: Bool { [adapter.source, battery.source, system.source].contains(.calculated) }
@@ -130,6 +132,10 @@ struct RawPowerTelemetry: Sendable {
     var directSystemLoadMilliwatts: Int64?
     var healthCondition: String?
     var healthEstimate: String?
+    var powerSampleCounter: Int64?
+    var batteryPowerSampleCounter: Int64?
+    var systemLoadSampleCounter: Int64?
+    var registryExternalConnected: Bool?
 }
 
 enum PowerMath {
@@ -156,9 +162,9 @@ enum PowerMath {
         if battery.watts == nil, let a = adapter.watts, let s = system.watts { battery = calculated(a - s, signed: true) }
 
         // PowerTelemetryData can still describe discharge just after macOS reports AC charging.
-        // A balanced set of old wattages is not sufficient evidence for an On Battery label.
+        // Balanced but delayed wattages must not override macOS charging status.
         let chargingConflict = raw.externalConnected == true && raw.isCharging == true
-            && (battery.watts.map { $0 < -0.2 } ?? false) && (adapter.watts ?? 0) <= 0.05
+            && ((battery.watts.map { $0 <= 0.2 } ?? false) || (adapter.watts.map { $0 <= 0.05 } ?? false))
         var quality: PowerQuality = [adapter, battery, system].allSatisfy { $0.watts != nil } ? .valid : .partial
         if chargingConflict || !consistent(adapter: adapter.watts, battery: battery.watts, system: system.watts,
                        externalConnected: raw.externalConnected) {
@@ -186,7 +192,8 @@ enum PowerMath {
             adapter: adapter, battery: battery, system: system, quality: quality,
             errorMessage: chargingConflict ? "macOS reports charging, but power readings disagree. Waiting for consistent power data."
                 : (quality == .inconsistent ? "Power readings disagree. Waiting for a consistent sample."
-                : (raw.externalConnected == nil ? "Power source information is unavailable." : nil))
+                : (raw.externalConnected == nil ? "Power source information is unavailable." : nil)),
+            powerUpdatedAt: raw.timestamp
         )
     }
 
@@ -209,8 +216,9 @@ enum PowerMath {
                          batteryPowerWatts: Double?, adapterPowerWatts: Double? = nil) -> PowerState {
         guard let externalConnected else { return .unavailable }
         guard externalConnected else { return .onBattery }
+        if isCharging == true { return .charging }
         if let power = batteryPowerWatts {
-            if power < -0.2 { return (adapterPowerWatts ?? 0) > 0.05 ? .supplementing : .onBattery }
+            if power < -0.2 { return (adapterPowerWatts ?? 0) > 0.05 ? .supplementing : .paused }
             if power > 0.2 { return .charging }
             return isFullyCharged == true ? .charged : .paused
         }
