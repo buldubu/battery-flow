@@ -4,6 +4,14 @@ Versions 0.3.0–0.3.3 were distributed as local builds.
 
 ## Unreleased
 
+## 0.3.6 — 2026-09-11
+
+### Fixed
+
+- Keep cached wattages pending when sample counters are unchanged; ignore changes to unused voltage/current inputs.
+- Respect macOS reporting that charging stopped, excluding conflicting positive battery power from live animation and history.
+- Show a neutral plug for up to three seconds on a new power connection, ending immediately when charging or a full battery is reported.
+
 ## 0.3.5 — 2026-09-09
 
 ### Fixed

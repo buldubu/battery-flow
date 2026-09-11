@@ -4,6 +4,82 @@ import Testing
 @testable import BatteryFlow
 
 struct PowerSampleFreshnessTests {
+    @Test func unrelatedVoltageCannotReleaseCachedChargingPower() {
+        var freshness = PowerSampleFreshness()
+        var raw = telemetry()
+        raw.isCharging = true
+        raw.directAdapterPowerMilliwatts = 20000
+        raw.directBatteryPowerMilliwatts = 10000
+        raw.powerSampleCounter = 10
+        raw.batteryPowerSampleCounter = 10
+        raw.systemLoadSampleCounter = 10
+        _ = freshness.snapshot(from: raw)
+        raw.isCharging = false
+        #expect(freshness.snapshot(from: raw).isAwaitingPowerData)
+        raw.voltageMillivolts = 12001
+        let waiting = freshness.snapshot(from: raw)
+        #expect(waiting.isAwaitingPowerData)
+        #expect(waiting.state == .paused)
+        // A changed direct value also cannot bypass an unchanged channel counter.
+        raw.directAdapterPowerMilliwatts = 10000
+        raw.directBatteryPowerMilliwatts = 0
+        #expect(freshness.snapshot(from: raw).isAwaitingPowerData)
+        raw.batteryPowerSampleCounter = 11
+        let fresh = freshness.snapshot(from: raw)
+        #expect(!fresh.isAwaitingPowerData)
+        #expect(fresh.state == .paused)
+        #expect(fresh.quality == .valid)
+    }
+
+    @Test func counterlessDirectPowerIgnoresUnusedVoltage() {
+        var freshness = PowerSampleFreshness()
+        var raw = telemetry()
+        _ = freshness.snapshot(from: raw)
+        freshness.invalidate()
+        raw.voltageMillivolts = 12001
+        #expect(freshness.snapshot(from: raw).isAwaitingPowerData)
+        raw.directAdapterPowerMilliwatts = 11000
+        raw.directSystemLoadMilliwatts = 11000
+        #expect(!freshness.snapshot(from: raw).isAwaitingPowerData)
+    }
+
+    @Test func connectionPresentationExpiresAndDoesNotDelayCharging() {
+        var presentation = PowerPresentation()
+        var raw = telemetry()
+        raw.externalConnected = false
+        _ = presentation.present(PowerMath.snapshot(from: raw))
+        raw.externalConnected = true
+        let connected = presentation.present(PowerMath.snapshot(from: raw))
+        #expect(connected.isConnecting)
+        #expect(connected.displayTitle == "Power Connected")
+        #expect(!connected.canAnimate)
+        raw.timestamp = testDate.addingTimeInterval(3)
+        let settled = presentation.present(PowerMath.snapshot(from: raw))
+        #expect(!settled.isConnecting)
+        #expect(settled.displayTitle == "Sailing")
+        raw.externalConnected = false
+        #expect(!presentation.present(PowerMath.snapshot(from: raw)).isConnecting)
+        raw.externalConnected = true
+        #expect(presentation.present(PowerMath.snapshot(from: raw)).isConnecting)
+        raw.isCharging = true
+        let charging = presentation.present(PowerMath.snapshot(from: raw))
+        #expect(!charging.isConnecting)
+        #expect(charging.state == .charging)
+        raw.isCharging = false
+        #expect(!presentation.present(PowerMath.snapshot(from: raw)).isConnecting)
+    }
+
+    @Test func alreadyConnectedLaunchAndFullBatterySkipConnectionPresentation() {
+        var presentation = PowerPresentation()
+        var raw = telemetry()
+        #expect(!presentation.present(PowerMath.snapshot(from: raw)).isConnecting)
+        raw.externalConnected = false
+        _ = presentation.present(PowerMath.snapshot(from: raw))
+        raw.externalConnected = true
+        raw.isFullyCharged = true
+        #expect(!presentation.present(PowerMath.snapshot(from: raw)).isConnecting)
+    }
+
     @Test func presentationKeepsStableValuesWithoutTreatingThemAsCurrent() {
         var presentation = PowerPresentation()
         var initial = PowerMath.snapshot(from: telemetry())

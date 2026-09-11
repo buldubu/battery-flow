@@ -78,14 +78,14 @@ struct PowerFlowView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Label(monitor.snapshot.state.title, systemImage: monitor.snapshot.state == .onBattery
-                      ? monitor.snapshot.batteryIcon : monitor.snapshot.state.icon).font(AppTypography.section)
+                Label(monitor.snapshot.displayTitle, systemImage: monitor.snapshot.state == .onBattery
+                      ? monitor.snapshot.batteryIcon : monitor.snapshot.displayIcon).font(AppTypography.section)
                 Spacer()
                 Text(monitor.snapshot.chargeText).font(AppTypography.reading)
                     .foregroundStyle(monitor.snapshot.isStale ? .secondary : .primary)
             }
             Text(monitor.snapshot.isStale ? "Showing the last known charge. Live power readings are unavailable."
-                 : monitor.snapshot.state.detail)
+                 : monitor.snapshot.displayDetail)
                 .font(AppTypography.secondary).foregroundStyle(.secondary)
         }
     }

@@ -5,6 +5,34 @@ import Testing
 
 @MainActor
 struct PowerTransitionTests {
+    @Test func neutralPlugExpiresWhilePanelIsClosed() async {
+        let pref = TestPreferences()
+        defer { pref.cleanup() }
+        let clock = ManualPollingClock()
+        let reader = MockTelemetryReader()
+        let history = HistoryStore(preferences: pref.value, files: MemoryHistoryFiles(), clock: clock)
+        var raw = telemetry()
+        raw.externalConnected = false
+        raw.directAdapterPowerMilliwatts = 0
+        raw.directBatteryPowerMilliwatts = -10000
+        await reader.setReading(raw)
+        let monitor = PowerMonitor(history: history, reader: reader, healthReader: MockHealthReader(), clock: clock)
+        monitor.start(observeSystem: false)
+        defer { monitor.stop() }
+        await waitFor { clock.intervals == [30] }
+        raw.externalConnected = true
+        await reader.setReading(raw)
+        monitor.powerChanged()
+        await waitFor { clock.intervals == [0.5, 30] }
+        clock.advance(0.5)
+        await waitFor { monitor.snapshot.isConnecting && clock.intervals == [1] }
+        #expect(BatteryMenuImage.symbol(for: monitor.snapshot) == "powerplug.fill")
+        clock.advance(3)
+        await waitFor { monitor.snapshot.timestamp == clock.now && clock.intervals == [1] }
+        #expect(!monitor.snapshot.isConnecting)
+        #expect(BatteryMenuImage.symbol(for: monitor.snapshot) == "sailboat.fill")
+    }
+
     @Test func cachedPowerIsExcludedFromHistoryWhileChargingIconUpdates() async {
         let pref = TestPreferences()
         defer { pref.cleanup() }

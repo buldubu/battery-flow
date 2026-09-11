@@ -9,8 +9,8 @@ struct BatteryMenuLabel: View {
         // MenuBarExtra extracts a native status-item image; sibling images are not a reliable label.
         Image(nsImage: BatteryMenuImage.image(for: monitor.snapshot, showPercentage: preferences.showPercentage))
             .renderingMode(.template)
-            .accessibilityLabel("Battery Flow, \(monitor.snapshot.chargeText), \(monitor.snapshot.state.title)")
-            .help("Battery Flow — \(monitor.snapshot.state.title), \(monitor.snapshot.chargeText)")
+            .accessibilityLabel("Battery Flow, \(monitor.snapshot.chargeText), \(monitor.snapshot.displayTitle)")
+            .help("Battery Flow — \(monitor.snapshot.displayTitle), \(monitor.snapshot.chargeText)")
     }
 }
 
@@ -53,6 +53,7 @@ enum BatteryMenuImage {
 
     static func symbol(for snapshot: PowerSnapshot) -> String {
         guard snapshot.state != .unavailable, !snapshot.isStale else { return "questionmark.circle" }
+        if snapshot.isConnecting { return "powerplug.fill" }
         return snapshot.state == .paused ? "sailboat.fill" : snapshot.batteryIcon
     }
 
