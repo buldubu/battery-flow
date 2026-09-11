@@ -38,27 +38,24 @@ struct PowerSampleFreshness {
     }
 
     private func hasNewPowerSample(_ raw: RawPowerTelemetry, after old: RawPowerTelemetry) -> Bool {
-        let counters = [
-            (raw.powerSampleCounter, old.powerSampleCounter),
-            (raw.batteryPowerSampleCounter, old.batteryPowerSampleCounter),
-            (raw.systemLoadSampleCounter, old.systemLoadSampleCounter)
-        ]
-        // An adapter-input counter may correctly stop while the battery and system-load
-        // channels continue updating. Any changed channel proves this is a new sample.
-        if counters.contains(where: { current, previous in
-            guard let current, let previous else { return false }
-            return current != previous
-        }) {
-            return true
+        // A channel's counter is authoritative when available. Only use changes
+        // to the measurements actually supplying that channel when counters are absent.
+        func changed(_ counter: Int64?, _ oldCounter: Int64?,
+                     _ values: [Int64?], _ oldValues: [Int64?]) -> Bool {
+            if let counter, let oldCounter { return counter != oldCounter }
+            return values != oldValues
         }
-        // A changed measurement is also evidence of an update on hardware that omits
-        // one or more counters; a repeated read or connection flag alone is not.
-        return [raw.directAdapterPowerMilliwatts, raw.directBatteryPowerMilliwatts,
-                raw.directSystemLoadMilliwatts, raw.systemVoltageInMillivolts,
-                raw.systemCurrentInMilliamps, raw.voltageMillivolts, raw.amperageMilliamps]
-            != [old.directAdapterPowerMilliwatts, old.directBatteryPowerMilliwatts,
-                old.directSystemLoadMilliwatts, old.systemVoltageInMillivolts,
-                old.systemCurrentInMilliamps, old.voltageMillivolts, old.amperageMilliamps]
+        func inputs(_ direct: Int64?, _ voltage: Int64?, _ current: Int64?) -> [Int64?] {
+            direct.map { [$0] } ?? [voltage, current]
+        }
+        return changed(raw.powerSampleCounter, old.powerSampleCounter,
+                       inputs(raw.directAdapterPowerMilliwatts, raw.systemVoltageInMillivolts, raw.systemCurrentInMilliamps),
+                       inputs(old.directAdapterPowerMilliwatts, old.systemVoltageInMillivolts, old.systemCurrentInMilliamps))
+            || changed(raw.batteryPowerSampleCounter, old.batteryPowerSampleCounter,
+                       inputs(raw.directBatteryPowerMilliwatts, raw.voltageMillivolts, raw.amperageMilliamps),
+                       inputs(old.directBatteryPowerMilliwatts, old.voltageMillivolts, old.amperageMilliamps))
+            || changed(raw.systemLoadSampleCounter, old.systemLoadSampleCounter,
+                       [raw.directSystemLoadMilliwatts], [old.directSystemLoadMilliwatts])
     }
 }
 
@@ -68,7 +65,23 @@ struct PowerPresentation {
     private var lastStableByConnection: [Bool: PowerSnapshot] = [:]
     private var lastStableWithoutConnection: PowerSnapshot?
 
+    private var previousConnection: Bool?
+    private var connectionDeadline: Date?
+
     mutating func present(_ observation: PowerSnapshot) -> PowerSnapshot {
+        var observation = observation
+        if observation.externalConnected == true && previousConnection == false {
+            connectionDeadline = observation.timestamp?.addingTimeInterval(3)
+        }
+        previousConnection = observation.externalConnected
+        if observation.externalConnected != true || observation.isCharging == true
+            || observation.isFullyCharged == true {
+            connectionDeadline = nil
+        }
+        if let deadline = connectionDeadline, let now = observation.timestamp {
+            observation.isConnecting = now < deadline && observation.state == .paused
+            if now >= deadline { connectionDeadline = nil }
+        }
         if observation.isAwaitingPowerData || observation.quality == .inconsistent {
             guard let lastStable = stableSnapshot(matching: observation.externalConnected) else { return observation }
             var result = observation

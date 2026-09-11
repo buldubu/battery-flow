@@ -75,6 +75,10 @@ struct PowerSnapshot: Equatable, Sendable {
     var quality: PowerQuality = .partial
     var isStale = false
     var errorMessage: String?
+    var isConnecting = false
+    var displayTitle: String { isConnecting && !isStale ? "Power Connected" : state.title }
+    var displayDetail: String { isConnecting && !isStale ? "Checking charging status…" : state.detail }
+    var displayIcon: String { isConnecting && !isStale ? "powerplug.fill" : state.icon }
     var isAwaitingPowerData = false
     var powerUpdatedAt: Date?
 
@@ -83,7 +87,7 @@ struct PowerSnapshot: Equatable, Sendable {
     var systemPowerWatts: Double? { system.watts }
     var chargeText: String { chargePercent.map { "\($0)%" } ?? "—" }
     var canAnimate: Bool {
-        guard !isStale, !isAwaitingPowerData, state != .unavailable, quality != .inconsistent else { return false }
+        guard !isStale, !isConnecting, !isAwaitingPowerData, state != .unavailable, quality != .inconsistent else { return false }
         return abs(battery.watts ?? 0) > 0.2 || ((adapter.watts ?? 0) > 0.05 && (system.watts ?? 0) > 0.05)
     }
     var isCalculated: Bool { [adapter.source, battery.source, system.source].contains(.calculated) }
@@ -165,8 +169,10 @@ enum PowerMath {
         // Balanced but delayed wattages must not override macOS charging status.
         let chargingConflict = raw.externalConnected == true && raw.isCharging == true
             && ((battery.watts.map { $0 <= 0.2 } ?? false) || (adapter.watts.map { $0 <= 0.05 } ?? false))
+        let stoppedChargingConflict = raw.externalConnected == true && raw.isCharging == false
+            && (battery.watts.map { $0 > 0.2 } ?? false)
         var quality: PowerQuality = [adapter, battery, system].allSatisfy { $0.watts != nil } ? .valid : .partial
-        if chargingConflict || !consistent(adapter: adapter.watts, battery: battery.watts, system: system.watts,
+        if chargingConflict || stoppedChargingConflict || !consistent(adapter: adapter.watts, battery: battery.watts, system: system.watts,
                        externalConnected: raw.externalConnected) {
             quality = .inconsistent
             adapter = .unavailable
@@ -219,7 +225,7 @@ enum PowerMath {
         if isCharging == true { return .charging }
         if let power = batteryPowerWatts {
             if power < -0.2 { return (adapterPowerWatts ?? 0) > 0.05 ? .supplementing : .paused }
-            if power > 0.2 { return .charging }
+            if power > 0.2 && isCharging == nil { return .charging }
             return isFullyCharged == true ? .charged : .paused
         }
         if isFullyCharged == true { return .charged }

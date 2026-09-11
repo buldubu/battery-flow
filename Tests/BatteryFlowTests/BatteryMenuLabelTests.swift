@@ -4,6 +4,16 @@ import Testing
 
 @MainActor
 struct BatteryMenuLabelTests {
+    @Test func connectingShowsNeutralPlug() throws {
+        let snapshot = PowerSnapshot(state: .paused, chargePercent: 80, isConnecting: true)
+        #expect(BatteryMenuImage.symbol(for: snapshot) == "powerplug.fill")
+        let image = BatteryMenuImage.image(for: snapshot, showPercentage: false)
+        let data = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+        #expect(hasInk(bitmap, from: 0, to: image.size.width, imageWidth: image.size.width))
+        #expect(BatteryMenuImage.symbol(for: snapshot.stale(message: "Read failed")) == "questionmark.circle")
+    }
+
     @Test func sailingShowsOnlyTheSailboat() throws {
         let snapshot = PowerSnapshot(state: .paused, chargePercent: 80)
         let image = BatteryMenuImage.image(for: snapshot, showPercentage: false)

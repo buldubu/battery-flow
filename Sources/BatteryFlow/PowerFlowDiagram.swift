@@ -51,7 +51,7 @@ struct PowerFlowDiagram: View {
     }
 
     private var accessibilitySummary: String {
-        "\(snapshot.state.detail). Mac uses \(ReadingFormat.watts(snapshot.systemPowerWatts)). "
+        "\(snapshot.displayDetail). Mac uses \(ReadingFormat.watts(snapshot.systemPowerWatts)). "
             + "Battery power is \(batteryValue)."
     }
 

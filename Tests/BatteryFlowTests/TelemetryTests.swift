@@ -4,6 +4,23 @@ import Testing
 @testable import BatteryFlow
 
 struct TelemetryTests {
+    @Test func stoppedChargingRejectsPositivePowerButMissingStatusCanUseIt() {
+        var raw = telemetry()
+        raw.directAdapterPowerMilliwatts = 20000
+        raw.directBatteryPowerMilliwatts = 10000
+        let stopped = PowerMath.snapshot(from: raw)
+        #expect(stopped.state == .paused)
+        #expect(stopped.quality == .inconsistent)
+        #expect(stopped.battery.watts == nil)
+        #expect(!stopped.canAnimate)
+        raw.isFullyCharged = true
+        #expect(PowerMath.snapshot(from: raw).state == .charged)
+        raw.isFullyCharged = false
+        raw.isCharging = nil
+        #expect(PowerMath.snapshot(from: raw).state == .charging)
+        #expect(PowerMath.snapshot(from: raw).quality == .valid)
+    }
+
     @Test func supportedStatesAndSignAgreement() {
         var raw = telemetry()
         #expect(PowerMath.snapshot(from: raw).state == .paused)
