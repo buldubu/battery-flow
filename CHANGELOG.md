@@ -4,6 +4,12 @@ Versions 0.3.0–0.3.3 were distributed as local builds.
 
 ## Unreleased
 
+## 0.3.7 — 2026-09-11
+
+### Changed
+
+- Slim the charging battery outline and bolt, and reduce the plug artwork to better match macOS menu-bar icons.
+
 ## 0.3.6 — 2026-09-11
 
 ### Fixed
