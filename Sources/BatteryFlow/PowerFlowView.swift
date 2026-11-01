@@ -16,6 +16,10 @@ struct PowerFlowView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                if monitor.snapshot.isAwaitingPowerData && monitor.snapshot.errorMessage == nil {
+                    Text("Waiting for fresh power readings. Showing the last known wattages briefly.")
+                        .font(AppTypography.secondary).foregroundStyle(.secondary)
+                }
                 PowerFlowDiagram(snapshot: monitor.snapshot,
                     isAnimating: panelVisible && preferences.animationsEnabled && !monitor.isLowPowerMode && monitor.snapshot.canAnimate)
                     .frame(height: 212)

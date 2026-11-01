@@ -4,6 +4,54 @@ import Testing
 @testable import BatteryFlow
 
 struct PowerSampleFreshnessTests {
+    @Test func cachedPowerExpiresAtTheBoundaryWithoutAffectingChargeOrChargingStatus() {
+        var presentation = PowerPresentation()
+        let initial = PowerMath.snapshot(from: telemetry())
+        _ = presentation.present(initial)
+        var waiting = initial
+        waiting.state = .charging
+        waiting.isCharging = true
+        waiting.quality = .partial
+        waiting.isAwaitingPowerData = true
+        waiting.adapter = .unavailable
+        waiting.battery = .unavailable
+        waiting.system = .unavailable
+        waiting.timestamp = testDate.addingTimeInterval(44.999)
+        #expect(presentation.present(waiting).adapter.watts == 10)
+        for seconds in [45.0, 60, 600] {
+            waiting.timestamp = testDate.addingTimeInterval(seconds)
+            let expired = presentation.present(waiting)
+            #expect(expired.adapter.watts == nil && expired.battery.watts == nil && expired.system.watts == nil)
+            #expect(expired.chargePercent == 80)
+            #expect(expired.state == .charging)
+            #expect(expired.isAwaitingPowerData && !expired.isStale && !expired.canAnimate)
+            #expect(expired.powerUpdatedAt == testDate)
+            #expect(expired.errorMessage != nil)
+        }
+        let recovered = presentation.present(PowerMath.snapshot(from: telemetry(at: testDate.addingTimeInterval(601))))
+        #expect(recovered.adapter.watts == 10)
+        #expect(!recovered.isAwaitingPowerData)
+        #expect(recovered.errorMessage == nil)
+    }
+
+    @Test func inconsistentReadingsCannotExtendCacheLifetimeOrResurrectOldConnectionValues() {
+        var presentation = PowerPresentation()
+        var initial = PowerMath.snapshot(from: telemetry())
+        _ = presentation.present(initial)
+        initial.timestamp = testDate.addingTimeInterval(30)
+        initial.quality = .inconsistent
+        #expect(presentation.present(initial).adapter.watts == 10)
+        initial.timestamp = testDate.addingTimeInterval(45)
+        #expect(presentation.present(initial).adapter.watts == nil)
+        initial.externalConnected = false
+        _ = presentation.present(initial)
+        initial.externalConnected = true
+        initial.timestamp = testDate.addingTimeInterval(60)
+        #expect(presentation.present(initial).adapter.watts == nil)
+        initial.timestamp = testDate.addingTimeInterval(-1)
+        #expect(presentation.present(initial).adapter.watts == nil)
+    }
+
     @Test func unrelatedVoltageCannotReleaseCachedChargingPower() {
         var freshness = PowerSampleFreshness()
         var raw = telemetry()

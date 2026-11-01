@@ -8,10 +8,10 @@ TEST_DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 TEST_FRAMEWORKS="$TEST_DEVELOPER_DIR/Library/Developer/Frameworks"
 TEST_RUNTIME="$TEST_DEVELOPER_DIR/Library/Developer/usr/lib"
 if [[ -d "$TEST_FRAMEWORKS/Testing.framework" ]]; then
-    exec swift test --disable-xctest \
+    exec python3 "$ROOT/Scripts/swift-tool.py" test --disable-xctest \
         -Xswiftc -F -Xswiftc "$TEST_FRAMEWORKS" \
         -Xlinker -rpath -Xlinker "$TEST_FRAMEWORKS" \
         -Xlinker -rpath -Xlinker "$TEST_RUNTIME" "$@"
 else
-    exec swift test --disable-xctest "$@"
+    exec python3 "$ROOT/Scripts/swift-tool.py" test --disable-xctest "$@"
 fi

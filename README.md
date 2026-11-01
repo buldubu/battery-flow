@@ -8,12 +8,14 @@ Battery Flow displays live power, charge, temperature, battery health, and local
 
 - Live power flow with charging, fully charged, paused, battery-only, and adapter-plus-battery states.
 - Battery condition, maximum capacity, cycles, and the dates of health readings reported by macOS.
-- Power, charge, and temperature history with 1-, 7-, or 30-day retention.
+- Interactive power, charge, and temperature history with 1-, 7-, or 30-day retention, recorded averages/peaks, and CSV export.
 - Native Settings for appearance, menu-bar percentage, temperature units, animation, history, and launch at login.
 - Validated readings, visible stale-data warnings, and recovery for partially damaged history files.
 - Local operation without accounts, analytics, or network telemetry.
 
 A neutral plug appears for up to three seconds after connecting power while charging status settles. It switches immediately when macOS reports charging or a full battery.
+
+During a telemetry transition, last-known wattages remain visible for at most 45 seconds after their last coherent reading. A waiting label distinguishes cached values from live readings. After expiry, wattages are hidden until consistent telemetry returns; charge and charging status continue updating independently.
 
 The lightning bolt inside the battery icon means **Charging**. During **Sailing**, only the sailboat is shown (plus the percentage when enabled): an adapter is connected and charging is paused. The battery icon reflects the current charge level, including a proportional fill behind the lightning bolt while charging.
 
@@ -24,6 +26,10 @@ The lightning bolt inside the battery icon means **Charging**. During **Sailing*
 - macOS 14 or later to run the Swift Testing suite with the current toolchain.
 
 There are no external Swift package dependencies. Telemetry availability varies by Mac and macOS version; Intel Macs are not currently supported.
+
+The standard commands use `Scripts/swift-tool.py` and Python 3. They explicitly select SwiftPM's native build backend and compile a small SwiftUI probe against the selected SDK. If the default SDK fails the probe, the newest working older installed macOS SDK is selected with a diagnostic. This handles Command Line Tools installations whose macOS 27 SDK lacks the required SwiftUI macro implementation; macOS 26.5 is verified locally. Explicit SDK selections are never silently replaced. If no SDK passes, install matching Xcode/Command Line Tools.
+
+To select an SDK or try another backend, set `BATTERYFLOW_SWIFT_SDK` to its SDK directory and/or `BATTERYFLOW_BUILD_SYSTEM` to `swiftbuild`. `DEVELOPER_DIR` selects the toolchain; an explicit `--sdk` argument also pins the SDK. `SDKROOT` supplies the initial automatic SDK candidate and may fall back if its probe fails. Build, test, package, and UI-review commands use the same selection process.
 
 ## Build and install
 
@@ -58,6 +64,14 @@ Defaults are System appearance, icon only, Celsius, animation enabled, recording
 Pausing history recording keeps existing data within the retention period. Clearing history and shortening retention enough to delete records require confirmation. Charge limits, Optimized Battery Charging, and Low Power Mode are managed in **macOS Battery Settings**, where available.
 
 ## Data and privacy
+
+Expand **History** to inspect readings by hovering or dragging across the chart. Focus the chart and use Left/Right, or choose the previous/next buttons. Averaged chart points show their observation count and time span. Average and peak statistics use valid original observations, rather than averaged chart buckets; they describe recorded samples, not time-weighted energy use. Gaps remain visible.
+
+The power chart uses positive values for power being supplied and negative values for consumption. Adapter input is above zero; Mac consumption is below zero. Battery charging appears below zero and discharge above zero, with explicit Charging, Discharging, or Idle inspection labels. This separates adapter input from Mac consumption when their wattages match.
+
+**Export CSV…** saves all original observations in the selected time range, across all metrics, including pending unsaved observations. It captures a snapshot when clicked, and the save dialog remains available if the menu-bar popover closes. CSV timestamps use ISO 8601 UTC, temperatures use Celsius, and numeric fields use decimal points. Missing or rejected measurements are blank; quality and provenance columns remain available. Exported files may reveal usage patterns.
+
+CSV retains the recorded measurement convention: adapter input and Mac consumption are positive magnitudes; battery power is positive while charging and negative while discharging. The chart's sign conversion does not change stored or exported readings.
 
 History is stored at `~/Library/Application Support/BatteryFlow/power-history.jsonl`. Preferences and dated health values use the app's local defaults domain. The app does not persist battery serial numbers or change charging hardware settings.
 

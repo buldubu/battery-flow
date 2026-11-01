@@ -243,6 +243,8 @@ actor HistoryPersistence {
 struct ChartSample: Identifiable, Equatable {
     let id: UUID
     let timestamp: Date
+    let endTimestamp: Date
+    let observationCount: Int
     let segment: UUID
     let powerSegment: UUID
     let adapter: Double?
@@ -268,7 +270,8 @@ enum HistoryAggregation {
             guard let first = bucket.first else { return }
             func mean(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
             let validPower = bucket.filter(\.powerIsConsistent)
-            output.append(ChartSample(id: first.id, timestamp: first.timestamp, segment: segment, powerSegment: powerSegment,
+            output.append(ChartSample(id: first.id, timestamp: first.timestamp,
+                endTimestamp: bucket.last?.timestamp ?? first.timestamp, observationCount: bucket.count, segment: segment, powerSegment: powerSegment,
                 adapter: mean(validPower.compactMap(\.adapterPowerWatts)),
                 battery: mean(validPower.compactMap(\.batteryPowerWatts)),
                 system: mean(validPower.compactMap(\.systemPowerWatts)),
@@ -310,6 +313,7 @@ final class HistoryStore: ObservableObject {
     private var chartRevision = 0
     private var lastRecordAttempt = Date.distantPast
     private var cache: [HistoryRange: (Int, Int, [ChartSample])] = [:]
+    private var summaryCache: [HistoryRange: (Int, Int, HistorySummary)] = [:]
     private var subscriptions = Set<AnyCancellable>()
 
     init(preferences: AppPreferences, fileURL: URL? = nil, files: any HistoryFileAccess = LocalHistoryFiles(),
@@ -346,6 +350,16 @@ final class HistoryStore: ObservableObject {
         cache[range] = (chartRevision, minute, data)
         return data
     }
+    func observations(in range: HistoryRange) -> [HistoryPoint] {
+        HistoryAnalysis.observations(points, in: range, now: clock.now)
+    }
+    func summary(in range: HistoryRange) -> HistorySummary {
+        let minute = Int(clock.now.timeIntervalSince1970 / 60)
+        if let entry = summaryCache[range], entry.0 == chartRevision, entry.1 == minute { return entry.2 }
+        let summary = HistorySummary(points: observations(in: range))
+        summaryCache[range] = (chartRevision, minute, summary)
+        return summary
+    }
     private func apply(_ status: HistoryStatus) {
         guard status.revision >= revision else { return }
         if isLoading { isLoading = false }
@@ -358,6 +372,7 @@ final class HistoryStore: ObservableObject {
             chartRevision += 1
             excludedPowerCount = points.filter { !$0.powerIsConsistent }.count
             cache = [:]
+            summaryCache = [:]
         }
         revision = status.revision
     }

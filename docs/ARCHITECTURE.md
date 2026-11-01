@@ -12,6 +12,8 @@ Each power reading has reported, calculated, or unavailable provenance. Adapter 
 
 Live presentation uses a three-second time-based smoothing constant. Source, state, direction, and sleep/wake changes reset smoothing. History receives validated unsmoothed observations. Failures preserve the last successful timestamp and mark readings stale.
 
+Unsettled or inconsistent wattages can reuse a coherent same-connection presentation only while its power timestamp is less than 45 seconds old. At the boundary, cached watts are removed and a waiting message appears, without invalidating independently fresh charge/status readings. An uninterrupted wait longer than 45 seconds returns hidden polling to 30/60 seconds; a new source/status transition or wake starts a fresh retry window.
+
 Some IORegistry telemetry keys and `system_profiler` output are hardware- and OS-dependent. Missing values remain unavailable; compatibility with every future schema is not assumed.
 
 ## Health
@@ -29,6 +31,14 @@ History records one observation per minute while awake and recording. JSONL sche
 Recovery backs up partially damaged files before rewriting valid records. Wholly unreadable or future-format files remain untouched. Pending writes stay in memory within retention; retries reconcile IDs to avoid duplicate records after partial writes. Quitting before a failed save is recovered can lose pending observations.
 
 Aggregation is cached by data revision, range, and current minute. Stable time buckets and separate recording segments preserve graph identity and visible gaps. Charts use linear interpolation.
+
+Chart inspection snaps to plotted samples and reports the original observation count and time span for each bucket. Summary statistics use unaggregated valid observations. CSV export snapshots the selected range, including pending observations, before opening a standalone save panel. Encoding and atomic disk writes run off the main actor; the export controller remains alive until completion or cancellation even if the popover closes. CSV includes quality/provenance and leaves rejected power values blank.
+
+`HistoryPowerFlow` converts only plotted values to a source/consumer convention: adapter input stays positive, Mac consumption is negated, and battery power is negated so charging is below zero and discharge above zero. Inspection uses directional battery labels. Aggregation, summary statistics, history files, and CSV keep the original measurement convention.
+
+## Build tooling
+
+`Scripts/swift-tool.py` is shared by the Makefile, test runner, packager, and UI-review builder. It uses the native SwiftPM backend by default and probes SwiftUI `@State` at the app's deployment target before selecting an SDK. Only automatic SDK selection may fall back to an older installed SDK. SDK and backend overrides are supported; packagers query SwiftPM for executable locations. The selected toolchain remains controlled by `DEVELOPER_DIR`/`xcode-select`.
 
 ## UI and preferences
 

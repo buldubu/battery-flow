@@ -4,6 +4,29 @@ Versions 0.3.0–0.3.3 were distributed as local builds.
 
 ## Unreleased
 
+## 0.4.1 — 2026-11-01
+
+### Changed
+
+- Plot history as signed power flow: adapter supply above zero, Mac consumption below zero, battery charging below zero, and battery discharge above zero.
+- Explain the chart signs in the legend and show explicit Charging, Discharging, and Idle battery readouts during inspection.
+- Preserve recorded history, CSV signs, and consumption statistics; the sign conversion applies only to chart presentation.
+
+## 0.4.0 — 2026-11-01
+
+### Added
+
+- Inspect history with a pointer, drag gesture, arrow keys, or previous/next controls. Readouts identify averaged chart buckets and their recorded time spans.
+- Show average and peak measurements calculated from original observations in the selected range.
+- Export original observations for the selected range to CSV, including UTC timestamps, Celsius temperatures, quality, and reading provenance. Missing and rejected values stay blank.
+
+### Fixed
+
+- Expire cached wattages after 45 seconds, preserving current charge and charging status while displaying a clear waiting message. Prolonged unsettled telemetry returns to normal polling intervals.
+- Use a shared SwiftPM entry point for builds, tests, packaging, and UI review. Probe SwiftUI SDK compatibility, select a working older installed SDK when necessary, and respect explicit SDK/backend overrides.
+- Resolve packaged executable locations through SwiftPM rather than assuming a build-system-specific output path.
+- Present the isolated UI-review window on launch by declaring its window scene before its menu-bar scene.
+
 ## 0.3.7 — 2026-09-11
 
 ### Changed
