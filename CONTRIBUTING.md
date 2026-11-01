@@ -6,6 +6,8 @@ Bug reports, focused fixes, and compatibility testing are welcome. Before a larg
 
 Use an Apple silicon Mac with Swift 6 or later. The app targets macOS 13; running the current Swift Testing suite requires macOS 14 or later. Repository and soak checks also use Python 3 without external Python dependencies.
 
+Use the Makefile and shared `Scripts/swift-tool.py` entry point so all checks use the same SDK/backend. Automatic SDK selection probes SwiftUI at the deployment target and reports any fallback. `BATTERYFLOW_SWIFT_SDK` selects an explicit SDK (never silently replaced); `BATTERYFLOW_BUILD_SYSTEM` overrides the default `native` backend. Use `DEVELOPER_DIR` to select a complete matching toolchain. See the README for local compatibility details.
+
 ```sh
 make build
 make test

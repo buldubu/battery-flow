@@ -26,6 +26,7 @@ final class PowerMonitor: ObservableObject {
     private var healthAttempt: Date?
     private var transitionUntil: Date?
     private var powerTransitionPending = false
+    private var awaitingPowerSince: Date?
     private var powerFreshness = PowerSampleFreshness()
     private var powerPresentation = PowerPresentation()
 
@@ -68,6 +69,7 @@ final class PowerMonitor: ObservableObject {
         eventTask = nil
         transitionUntil = nil
         powerTransitionPending = false
+        awaitingPowerSince = nil
         events?.stop()
         events = nil
     }
@@ -95,6 +97,7 @@ final class PowerMonitor: ObservableObject {
             powerTransitionPending = false
             snapshot = snapshot.stale(message: "Waiting for the Mac to wake.")
         } else {
+            awaitingPowerSince = nil
             snapshot = snapshot.stale(message: "Refreshing after wake.")
             reschedule()
         }
@@ -124,10 +127,16 @@ final class PowerMonitor: ObservableObject {
                     raw.isCharging.map { previous != $0 }
                 } ?? false
                 if sourceChanged || chargingChanged {
+                    awaitingPowerSince = nil
                     beginTransitionSampling(reset: true)
                 }
                 let next = powerFreshness.snapshot(from: raw)
                 snapshot = powerPresentation.present(next)
+                if snapshot.isAwaitingPowerData {
+                    if awaitingPowerSince == nil { awaitingPowerSince = clock.now }
+                } else {
+                    awaitingPowerSince = nil
+                }
                 if raw.healthCondition != nil || raw.healthEstimate != nil {
                     health.condition = BatteryHealthSnapshot.nonempty(raw.healthCondition)
                     health.estimate = BatteryHealthSnapshot.nonempty(raw.healthEstimate)
@@ -195,7 +204,12 @@ final class PowerMonitor: ObservableObject {
     private var pollingInterval: TimeInterval {
         let normal = Self.interval(panelVisible: panelVisible, lowPowerMode: isLowPowerMode)
         let fast = isLowPowerMode ? 2.0 : 1.0
-        if snapshot.isAwaitingPowerData { return min(normal, fast) }
+        if snapshot.isAwaitingPowerData {
+            if let since = awaitingPowerSince, clock.now.timeIntervalSince(since) >= PowerPresentation.cachedPowerLifetime {
+                return normal
+            }
+            return min(normal, fast)
+        }
         if let deadline = transitionUntil, clock.now < deadline { return min(normal, fast) }
         // Charge Limit can start charging without changing the connected power source
         // or delivering the public source notification. Avoid another 30-second delay.

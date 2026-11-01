@@ -5,6 +5,41 @@ import Testing
 
 @MainActor
 struct PowerTransitionTests {
+    @Test(arguments: [false, true]) func prolongedPendingTelemetryBacksOffAndRecoversWhileHidden(lowPower: Bool) async {
+        let pref = TestPreferences()
+        defer { pref.cleanup() }
+        let clock = ManualPollingClock()
+        let reader = MockTelemetryReader()
+        var raw = telemetry()
+        raw.powerSampleCounter = 40
+        await reader.setReading(raw)
+        let history = HistoryStore(preferences: pref.value, files: MemoryHistoryFiles(), clock: clock)
+        let monitor = PowerMonitor(history: history, reader: reader, healthReader: MockHealthReader(), clock: clock)
+        monitor.setLowPowerMode(lowPower)
+        let settled = lowPower ? 4.0 : 2.0
+        let fast = lowPower ? 2.0 : 1.0
+        let normal = lowPower ? 60.0 : 30.0
+        monitor.start(observeSystem: false)
+        defer { monitor.stop() }
+        await waitFor { clock.intervals == [settled] }
+        raw.isCharging = true
+        await reader.setReading(raw)
+        clock.advance(settled)
+        await waitFor { monitor.snapshot.isAwaitingPowerData && clock.intervals == [fast] }
+        clock.advance(45)
+        await waitFor { clock.intervals == [normal] }
+        #expect(monitor.snapshot.adapter.watts == nil)
+        #expect(monitor.snapshot.errorMessage != nil)
+        raw.powerSampleCounter = 41
+        raw.directAdapterPowerMilliwatts = 20000
+        raw.directBatteryPowerMilliwatts = 10000
+        await reader.setReading(raw)
+        clock.advance(normal)
+        await waitFor { !monitor.snapshot.isAwaitingPowerData && clock.intervals == [normal] }
+        #expect(monitor.snapshot.adapter.watts == 20)
+        #expect(monitor.snapshot.errorMessage == nil)
+    }
+
     @Test func neutralPlugExpiresWhilePanelIsClosed() async {
         let pref = TestPreferences()
         defer { pref.cleanup() }

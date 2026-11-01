@@ -62,6 +62,7 @@ struct PowerSampleFreshness {
 /// Keeps validation state out of the visual presentation. Invalid observations are
 /// still recorded as such, while the panel holds its last coherent set of values.
 struct PowerPresentation {
+    static let cachedPowerLifetime: TimeInterval = 45
     private var lastStableByConnection: [Bool: PowerSnapshot] = [:]
     private var lastStableWithoutConnection: PowerSnapshot?
 
@@ -83,16 +84,22 @@ struct PowerPresentation {
             if now >= deadline { connectionDeadline = nil }
         }
         if observation.isAwaitingPowerData || observation.quality == .inconsistent {
-            guard let lastStable = stableSnapshot(matching: observation.externalConnected) else { return observation }
             var result = observation
-            result.adapter = lastStable.adapter
-            result.battery = lastStable.battery
-            result.system = lastStable.system
-            result.powerUpdatedAt = lastStable.powerUpdatedAt
             result.isAwaitingPowerData = true
-            // A transition is expected to settle; persistent read failures still use
-            // the normal stale/error presentation.
-            result.errorMessage = nil
+            result.adapter = .unavailable
+            result.battery = .unavailable
+            result.system = .unavailable
+            let lastStable = stableSnapshot(matching: observation.externalConnected)
+            result.powerUpdatedAt = lastStable?.powerUpdatedAt
+            if let lastStable, let updated = lastStable.powerUpdatedAt, let now = observation.timestamp,
+               (0..<Self.cachedPowerLifetime).contains(now.timeIntervalSince(updated)) {
+                result.adapter = lastStable.adapter
+                result.battery = lastStable.battery
+                result.system = lastStable.system
+                result.errorMessage = nil
+            } else {
+                result.errorMessage = "Waiting for consistent power readings. Live wattages are unavailable."
+            }
             return result
         }
         let result = PowerMath.smooth(observation, previous: stableSnapshot(matching: observation.externalConnected))

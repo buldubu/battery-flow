@@ -1,7 +1,7 @@
 .PHONY: build test test-tools check hooks app install run clean
 
 build:
-	swift build
+	python3 Scripts/swift-tool.py build
 
 test:
 	./Scripts/test.sh
@@ -24,5 +24,5 @@ install:
 run: install
 
 clean:
-	swift package clean
+	python3 Scripts/swift-tool.py package clean
 	rm -rf build/BatteryFlow.app

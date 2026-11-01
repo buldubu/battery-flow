@@ -22,11 +22,12 @@ let package = Package(name: "BatteryFlowUIReview", platforms: [.macOS(.v13)],
     targets: [.executableTarget(name: "BatteryFlowUIReview")])
 PACKAGE_FILE
 
-swift build --package-path "$PACKAGE" -c release
+python3 "$ROOT/Scripts/swift-tool.py" build --package-path "$PACKAGE" -c release
+BIN_DIR="$(python3 "$ROOT/Scripts/swift-tool.py" build --package-path "$PACKAGE" -c release --show-bin-path)"
 pkill -x BatteryFlowUIReview 2>/dev/null || true
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$PACKAGE/.build/release/BatteryFlowUIReview" "$APP/Contents/MacOS/"
+cp "$BIN_DIR/BatteryFlowUIReview" "$APP/Contents/MacOS/"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 plutil -replace CFBundleExecutable -string BatteryFlowUIReview "$APP/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string local.buldubu.BatteryFlow.UIReview "$APP/Contents/Info.plist"

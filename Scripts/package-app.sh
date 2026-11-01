@@ -7,11 +7,12 @@ VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 BUILD_NUMBER="$(date -u +%Y%m%d%H%M%S)"
 
 cd "$ROOT"
-swift build -c release
+python3 "$ROOT/Scripts/swift-tool.py" build -c release
+BIN_DIR="$(python3 "$ROOT/Scripts/swift-tool.py" build -c release --show-bin-path)"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$ROOT/.build/release/BatteryFlow" "$APP/Contents/MacOS/BatteryFlow"
+cp "$BIN_DIR/BatteryFlow" "$APP/Contents/MacOS/BatteryFlow"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 for NOTICE in LICENSE THIRD_PARTY_NOTICES.md; do
     if [[ -f "$ROOT/$NOTICE" ]]; then
